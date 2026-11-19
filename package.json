@@ -1,0 +1,11 @@
+{
+  "name": "red-string",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Red String: a conspiracy corkboard. No dependencies.",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test \"acceptance/*.test.js\" \"tests/*.test.js\""
+  },
+  "engines": { "node": ">=22" }
+}
