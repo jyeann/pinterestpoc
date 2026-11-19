@@ -238,3 +238,12 @@ test('a handler that throws is a 500 internal JSON error and the server keeps ru
     await new Promise((r) => s4.close(r));
   }
 });
+
+test('request and headers timeouts are set, with overrides', () => {
+  const s = createServer({ store: createStore(), publicDir: pub });
+  assert.equal(s.requestTimeout, 10000);
+  assert.equal(s.headersTimeout, 5000);
+  const t = createServer({ store: createStore(), publicDir: pub, requestTimeoutMs: 7000, headersTimeoutMs: 3000 });
+  assert.equal(t.requestTimeout, 7000);
+  assert.equal(t.headersTimeout, 3000);
+});

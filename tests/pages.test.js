@@ -184,6 +184,9 @@ test('notFoundHtml has the not-found testids, copy and a home link, with no inli
   assert.equal(textOf(html, 'notfound-text'), 'Nobody filed that one, or somebody made it disappear.');
   assert.equal(textOf(html, 'notfound-home'), 'Open a new case');
   assert.equal(attr(tagsWith(html, 'notfound-home')[0], 'href'), '/');
+  // A1: only .btn.primary is styled, so the link must carry both classes.
+  assert.deepEqual(attr(tagsWith(html, 'notfound-home')[0], 'class').split(/\s+/).sort(), ['btn', 'primary']);
+  assert.match(html, /<main[\s>]/);
   assert.match(html, /<meta[^>]+name="viewport"/);
   noInline(html);
 });
@@ -228,6 +231,40 @@ test('wallShellHtml has the roles and labels ux.md requires', () => {
   assert.equal(textOf(html, 'empty-state'), 'Nothing on the wall. Type something you saw.');
   assert.equal(textOf(html, 'wall-error'), 'The wall would not talk. Reload and try again. Reload');
   assert.match(html, /<label[^>]+for="phrase-input"[^>]*>\s*What did you see\?/);
+});
+
+test('wallShellHtml has a main landmark, one heading and sr-only key hints (A8, A9)', () => {
+  const html = wallShellHtml('abc');
+  assert.equal((html.match(/<main[\s>]/g) || []).length, 1);
+  assert.equal((html.match(/<\/main>/g) || []).length, 1);
+  assert.equal((html.match(/<h1[\s>]/g) || []).length, 1);
+  const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+  for (const id of ['phrase-form', 'detective-btn', 'board', 'finding-panel', 'detective-panel']) assert.ok(main.includes(`data-testid="${id}"`), `${id} inside main`);
+  assert.ok(!main.includes('data-testid="wall-title"'), 'header stays outside main');
+  const keys = /<p class="sr-only" id="pin-keys">([^<]+)<\/p>/.exec(html);
+  assert.ok(keys && /Arrow/.test(keys[1]) && /Enter/.test(keys[1]) && /Delete/.test(keys[1]));
+  assert.match(html, /<p class="sr-only" id="string-keys">[^<]*Enter[^<]*Delete/);
+});
+
+test('wallShellHtml announces connection changes and keeps the error toast until dismissed (A6)', () => {
+  const html = wallShellHtml('abc');
+  const conn = tagsWith(html, 'conn-status')[0];
+  assert.equal(attr(conn, 'role'), 'status');
+  assert.equal(attr(conn, 'data-state'), 'reconnecting');
+  const toast = tagsWith(html, 'action-error')[0];
+  assert.equal(attr(toast, 'role'), 'alert');
+  assert.match(toast, /\bhidden\b/);
+  assert.equal(textOf(html, 'action-dismiss'), 'Dismiss');
+  assert.match(html, /<div class="action-toast" id="action-toast" hidden>/);
+});
+
+test('wallShellHtml reads the detective suggestion when focus lands on Tie it (A7)', () => {
+  const html = wallShellHtml('abc');
+  assert.equal(attr(tagsWith(html, 'detective-message')[0], 'id'), 'detective-message');
+  assert.equal(attr(tagsWith(html, 'detective-accept')[0], 'aria-describedby'), 'detective-message');
+  assert.equal(attr(tagsWith(html, 'detective-panel')[0], 'aria-describedby'), 'detective-message');
+  assert.equal(textOf(html, 'detective-accept'), 'Tie it');
+  assert.equal(textOf(html, 'detective-dismiss'), 'Not now');
 });
 
 test('wallShellHtml initial states: loading shown, errors and panels hidden', () => {

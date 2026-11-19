@@ -47,7 +47,10 @@ async function start(opts = {}) {
     if (persist) persist.flush();
     server.hub.closeAll();
     stopping = new Promise((resolve) => {
-      server.close(() => resolve());
+      server.close(() => {
+        if (persist) persist.flush(); // a change accepted while closing
+        resolve();
+      });
       server.closeIdleConnections();
       const t = setTimeout(() => server.closeAllConnections(), 200);
       if (t.unref) t.unref();

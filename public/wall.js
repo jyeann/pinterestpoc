@@ -22,7 +22,7 @@
     form: $('phrase-form'), input: $('phrase-input'), submit: $('phrase-submit'), phraseError: $('phrase-error'),
     detBtn: $('detective-btn'), board: $('board'), strings: $('string-layer'), pinLayer: document.getElementById('pin-layer'),
     loading: $('wall-loading'), empty: $('empty-state'), wallError: $('wall-error'), retry: $('wall-retry'),
-    actionError: $('action-error'), tieHint: $('tie-hint'),
+    actionError: $('action-error'), actionToast: document.getElementById('action-toast'), actionDismiss: $('action-dismiss'), tieHint: $('tie-hint'),
     finding: $('finding-panel'), findingText: $('finding-text'), findingPair: $('finding-pair'),
     findingDelete: $('finding-delete'), findingClose: $('finding-close'),
     det: $('detective-panel'), detMsg: $('detective-message'), detAccept: $('detective-accept'), detDismiss: $('detective-dismiss'),
@@ -46,6 +46,7 @@
   var pinEls = Object.create(null);
   var stringEls = Object.create(null);
   var stubEls = Object.create(null);
+  var wrapEls = Object.create(null);
   // Strings run behind the cards; this overlay only draws the first stretch at each pushpin so the string
   // visibly hangs from the pin head.
   var front = document.createElementNS(SVG_NS, 'svg');
@@ -57,7 +58,6 @@
   var openString = null;
   var opener = null;
   var detSuggestion = null;
-  var toastTimer = null;
 
   function pinById(id) { for (var i = 0; i < state.pins.length; i += 1) if (state.pins[i].id === id) return state.pins[i]; return null; }
   function stringById(id) { for (var i = 0; i < state.strings.length; i += 1) if (state.strings[i].id === id) return state.strings[i]; return null; }
@@ -88,21 +88,35 @@
   }
 
   /* ---------- errors ---------- */
+  // The error toast stays until it is dismissed or the next action starts (it never times out).
   function showToast(text) {
     el.actionError.textContent = text;
     el.actionError.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.actionError.hidden = true; }, 6000);
+    el.actionToast.hidden = false;
   }
+  function hideToast() {
+    var had = !el.actionToast.hidden;
+    el.actionToast.hidden = true;
+    el.actionError.hidden = true;
+    el.actionError.textContent = '';
+    return had;
+  }
+  el.actionDismiss.addEventListener('click', function () {
+    hideToast();
+    el.input.focus();
+  });
   function messageFor(r) {
     if (r.net) return COPY.network;
     if (r.status === 413) return COPY.tooLong;
     return (r.data && r.data.error && r.data.error.message) || 'The wall would not talk. Reload and try again.';
   }
   function errorCode(r) { return r.data && r.data.error && r.data.error.code; }
+  // A 404 on a pin or string means a colleague already removed it: drop it locally, say nothing.
+  function isGone(r) { return !r.ok && !r.net && r.status === 404; }
 
   /* ---------- API ---------- */
   function api(method, path, body) {
+    if (method !== 'GET') hideToast();
     var opts = { method: method, headers: { 'x-client-id': clientId } };
     if (body !== undefined) { opts.headers['content-type'] = 'application/json'; opts.body = JSON.stringify(body); }
     return fetch(path, opts).then(function (res) {
@@ -144,6 +158,7 @@
   el.status.addEventListener('animationend', function () { el.status.classList.remove('stamping'); });
 
   function setConn(s) {
+    if (el.conn.getAttribute('data-state') === s && el.conn.textContent === COPY[s]) return;
     el.conn.setAttribute('data-state', s);
     el.conn.textContent = COPY[s];
   }
@@ -191,6 +206,8 @@
     p.className = 'pin';
     p.setAttribute('data-testid', 'pin');
     p.setAttribute('role', 'group');
+    p.setAttribute('aria-roledescription', 'pinned card');
+    p.setAttribute('aria-describedby', 'pin-keys');
     p.tabIndex = 0;
     p.setAttribute('data-id', pin.id);
     p.setAttribute('data-phrase', pin.phrase);
@@ -223,11 +240,12 @@
     p.appendChild(art);
     p.appendChild(label);
     p.appendChild(actions);
-    p.addEventListener('animationend', function (e) { if (e.target === p) layoutStrings(); });
+    p.addEventListener('animationend', function (e) { if (e.target === p) layoutPin(pin.id); });
     p.addEventListener('pointerdown', function (e) { onPointerDown(e, pin.id); });
     p.addEventListener('pointermove', function (e) { onPointerMove(e, pin.id); });
     p.addEventListener('pointerup', function (e) { onPointerUp(e, pin.id, false); });
     p.addEventListener('pointercancel', function (e) { onPointerUp(e, pin.id, true); });
+    p.addEventListener('lostpointercapture', function (e) { onPointerUp(e, pin.id, true); });
     p.addEventListener('keydown', function (e) { onPinKey(e, pin.id); });
     tie.addEventListener('click', function () { onTieButton(pin.id); });
     del.addEventListener('click', function () { removePin(pin.id); });
@@ -241,12 +259,15 @@
     el.pinLayer.appendChild(pinEls[pin.id]);
     placePin(pin);
     renderEmpty();
-    layoutStrings();
+    layoutAll();
     return pin;
   }
   function removePinLocal(id, removedStrings) {
     var pin = pinById(id);
     if (!pin) return null;
+    // A pin removed mid-drag must not leave the drag state behind, or no pin could be dragged again.
+    if (dragging && dragging.id === id) dragging = null;
+    cancelPendingMove(pin);
     (removedStrings || []).forEach(removeStringLocal);
     state.strings.filter(function (s) { return s.a === id || s.b === id; }).forEach(function (s) { removeStringLocal(s.id); });
     state.pins = state.pins.filter(function (x) { return x.id !== id; });
@@ -274,6 +295,7 @@
     g.setAttribute('data-testid', 'string');
     g.setAttribute('role', 'button');
     g.setAttribute('tabindex', '0');
+    g.setAttribute('aria-describedby', 'string-keys');
     g.setAttribute('data-id', s.id);
     g.setAttribute('data-a', s.a);
     g.setAttribute('data-b', s.b);
@@ -301,12 +323,14 @@
     state.strings.push(s);
     stringEls[s.id] = buildString(s, fresh);
     el.strings.appendChild(stringEls[s.id]);
+    // One neat wrap (a ring) and a short tail at each pushpin, so the string visibly hangs from the pin head.
     var stub = svgEl('g');
-    stub.appendChild(svgEl('path', 'string-stub'));
-    stub.appendChild(svgEl('path', 'string-stub'));
+    var bits = { g: stub, tailA: svgEl('path', 'string-tail'), tailB: svgEl('path', 'string-tail') };
+    stub.appendChild(bits.tailA);
+    stub.appendChild(bits.tailB);
     front.appendChild(stub);
-    stubEls[s.id] = stub;
-    layoutStrings();
+    stubEls[s.id] = bits;
+    layoutAll();
     var pa = pinById(s.a);
     var pb = pinById(s.b);
     if (pa) describePin(pa);
@@ -320,12 +344,18 @@
     var g = stringEls[id];
     if (g && g.parentNode) g.parentNode.removeChild(g);
     delete stringEls[id];
-    if (stubEls[id] && stubEls[id].parentNode) stubEls[id].parentNode.removeChild(stubEls[id]);
+    if (stubEls[id] && stubEls[id].g.parentNode) stubEls[id].g.parentNode.removeChild(stubEls[id].g);
     delete stubEls[id];
     var pa = pinById(s.a);
     var pb = pinById(s.b);
     if (pa) describePin(pa);
     if (pb) describePin(pb);
+    [s.a, s.b].forEach(function (pid) {
+      if (wrapEls[pid] && degree(pid) === 0) {
+        if (wrapEls[pid].parentNode) wrapEls[pid].parentNode.removeChild(wrapEls[pid]);
+        delete wrapEls[pid];
+      }
+    });
     if (openString === id) closeFinding(false);
     return s;
   }
@@ -360,35 +390,93 @@
     var by = (lo + hi) / 2;
     return d + ' M' + bx.toFixed(1) + ' ' + by.toFixed(1) + ' l0.1 0';
   }
-  function layoutStrings(onlyPin) {
+  function tailEnd(a, b) {
+    var cx = (a.x + b.x) / 2;
+    var cy = (a.y + b.y) / 2 + Math.max(24, Math.hypot(b.x - a.x, b.y - a.y) * 0.12);
+    var n = Math.hypot(cx - a.x, cy - a.y) || 1;
+    return { x: a.x + ((cx - a.x) / n) * 14, y: a.y + ((cy - a.y) / n) * 14 };
+  }
+  // One ring per pin that has strings, however many strings hang from it.
+  function setRing(pid, a) {
+    var ring = wrapEls[pid];
+    if (!ring) {
+      ring = svgEl('ellipse', 'string-wrap');
+      front.appendChild(ring);
+      wrapEls[pid] = ring;
+    }
+    ring.setAttribute('cx', a.x.toFixed(1));
+    ring.setAttribute('cy', (a.y + 1).toFixed(1));
+    ring.setAttribute('rx', '11');
+    ring.setAttribute('ry', '4.5');
+  }
+  // Reads first (layer rect, every anchor, each pin once), writes after, so one layout serves the whole pass.
+  // `only` is a map of pin ids: just the strings touching them are redrawn.
+  function layoutStrings(only) {
     var layerRect = el.strings.getBoundingClientRect();
+    var anchors = Object.create(null);
+    var jobs = [];
+    function anchor(id) {
+      if (!(id in anchors)) anchors[id] = anchorOf(id, layerRect);
+      return anchors[id];
+    }
     state.strings.forEach(function (s) {
-      if (onlyPin && s.a !== onlyPin && s.b !== onlyPin) return;
+      if (only && !only[s.a] && !only[s.b]) return;
       var g = stringEls[s.id];
-      var a = anchorOf(s.a, layerRect);
-      var b = anchorOf(s.b, layerRect);
+      var a = anchor(s.a);
+      var b = anchor(s.b);
       if (!g || !a || !b) return;
-      var d = pathFor(a, b);
-      var paths = g.querySelectorAll('path');
+      jobs.push({ s: s, g: g, a: a, b: b });
+    });
+    jobs.forEach(function (j) {
+      var d = pathFor(j.a, j.b);
+      var paths = j.g.querySelectorAll('path');
       for (var i = 0; i < paths.length; i += 1) {
-        paths[i].setAttribute('d', paths[i].classList.contains('string-hit') ? hitPathFor(a, b, d) : d);
+        paths[i].setAttribute('d', paths[i].classList.contains('string-hit') ? hitPathFor(j.a, j.b, d) : d);
       }
-      var stubs = stubEls[s.id] && stubEls[s.id].querySelectorAll('path');
-      if (stubs && stubs.length === 2) {
-        stubs[0].setAttribute('d', d);
-        stubs[1].setAttribute('d', pathFor(b, a));
+      var st = stubEls[j.s.id];
+      if (st) {
+        var ea = tailEnd(j.a, j.b);
+        var eb = tailEnd(j.b, j.a);
+        st.tailA.setAttribute('d', 'M' + j.a.x.toFixed(1) + ' ' + j.a.y.toFixed(1) + ' L' + ea.x.toFixed(1) + ' ' + ea.y.toFixed(1));
+        st.tailB.setAttribute('d', 'M' + j.b.x.toFixed(1) + ' ' + j.b.y.toFixed(1) + ' L' + eb.x.toFixed(1) + ' ' + eb.y.toFixed(1));
+        setRing(j.s.a, j.a);
+        setRing(j.s.b, j.b);
       }
     });
   }
-  function layoutFor(ms) {
-    var end = Date.now() + ms;
-    (function tick() {
-      layoutStrings();
-      if (Date.now() < end) requestAnimationFrame(tick);
-    }());
+
+  // One coalesced animation-frame loop does every layout and the drag move; nothing else calls rAF.
+  var raf = { id: 0, all: false, pins: Object.create(null), until: Object.create(null), allUntil: 0 };
+  function schedule() { if (!raf.id) raf.id = requestAnimationFrame(frame); }
+  function layoutAll() { raf.all = true; schedule(); }
+  function layoutPin(id) { raf.pins[id] = true; schedule(); }
+  // Keep laying out for `ms` (CSS transitions move the cards); for one pin's strings, or for all.
+  function layoutFor(ms, id) {
+    var end = performance.now() + ms;
+    if (id) raf.until[id] = Math.max(raf.until[id] || 0, end);
+    else raf.allUntil = Math.max(raf.allUntil, end);
+    schedule();
   }
-  if (window.ResizeObserver) new ResizeObserver(function () { layoutStrings(); }).observe(el.board);
-  window.addEventListener('resize', function () { layoutStrings(); });
+  function frame() {
+    raf.id = 0;
+    if (dragging && dragging.dirty) applyDragMove();
+    var now = performance.now();
+    var all = raf.all || now < raf.allUntil;
+    var only = null;
+    var any = false;
+    var live = now < raf.allUntil;
+    Object.keys(raf.until).forEach(function (k) {
+      if (now < raf.until[k]) { live = true; any = true; if (!only) only = Object.create(null); only[k] = true; } else delete raf.until[k];
+    });
+    Object.keys(raf.pins).forEach(function (k) { any = true; if (!only) only = Object.create(null); only[k] = true; });
+    raf.all = false;
+    raf.pins = Object.create(null);
+    if (all) layoutStrings(null);
+    else if (any) layoutStrings(only);
+    if (live) schedule();
+  }
+  if (window.ResizeObserver) new ResizeObserver(function () { layoutAll(); placePanels(); }).observe(el.board);
+  window.addEventListener('resize', function () { layoutAll(); placePanels(); });
 
   /* ---------- snapshot ---------- */
   function applySnapshot(w) {
@@ -413,7 +501,7 @@
     state.version = -1;
     applyMeta(w);
     renderEmpty();
-    layoutStrings();
+    layoutAll();
     if (firstLoad) layoutFor(400);
   }
 
@@ -423,18 +511,22 @@
     if (e.target.closest && e.target.closest('button')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     var pin = pinById(id);
-    if (!pin || dragging) return;
-    dragging = { id: id, pointer: e.pointerId, sx: e.clientX, sy: e.clientY, lx: e.clientX, moved: false, lean: 0 };
+    if (!pin) return;
+    if (dragging && !pinEls[dragging.id]) dragging = null;
+    if (dragging) return;
+    dragging = { id: id, pointer: e.pointerId, sx: e.clientX, sy: e.clientY, ex: e.clientX, ey: e.clientY, lx: e.clientX, moved: false, dirty: false, lean: 0 };
     try { pinEls[id].setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
   }
+  // pointermove only records the latest position; the frame loop applies it once per animation frame.
+  // The first move past the 4px threshold is applied at once, and reads the layer rect and card size once.
   function onPointerMove(e, id) {
     var d = dragging;
     if (!d || d.id !== id || d.pointer !== e.pointerId) return;
-    var dx = e.clientX - d.sx;
-    var dy = e.clientY - d.sy;
-    var p = pinEls[id];
+    d.ex = e.clientX;
+    d.ey = e.clientY;
     if (!d.moved) {
-      if (Math.hypot(dx, dy) < 4) return;
+      if (Math.hypot(d.ex - d.sx, d.ey - d.sy) < 4) return;
+      var p = pinEls[id];
       d.moved = true;
       p.classList.add('dragging');
       cancelPendingMove(pinById(id));
@@ -442,18 +534,34 @@
       var cs = window.getComputedStyle(p);
       d.cx = parseFloat(cs.left);
       d.cy = parseFloat(cs.top);
+      d.rect = el.pinLayer.getBoundingClientRect();
+      d.hw = p.offsetWidth / 2;
+      d.hh = p.offsetHeight / 2;
+      applyDragMove();
+      schedule();
+      return;
     }
-    var rect = el.pinLayer.getBoundingClientRect();
-    var hw = p.offsetWidth / 2;
-    var hh = p.offsetHeight / 2;
-    var cx = clamp(d.cx + dx, Math.min(hw, rect.width / 2), Math.max(rect.width - hw, rect.width / 2));
-    var cy = clamp(d.cy + dy, Math.min(hh, rect.height / 2), Math.max(rect.height - hh, rect.height / 2));
+    d.dirty = true;
+    schedule();
+  }
+  function applyDragMove() {
+    var d = dragging;
+    if (!d || !d.moved) return;
+    d.dirty = false;
+    var id = d.id;
+    var p = pinEls[id];
     var pin = pinById(id);
+    if (!p || !pin) return;
+    var rect = d.rect;
+    var dx = d.ex - d.sx;
+    var dy = d.ey - d.sy;
+    var cx = clamp(d.cx + dx, Math.min(d.hw, rect.width / 2), Math.max(rect.width - d.hw, rect.width / 2));
+    var cy = clamp(d.cy + dy, Math.min(d.hh, rect.height / 2), Math.max(rect.height - d.hh, rect.height / 2));
     pin.x = clamp(Math.round((cx / rect.width) * 1000), 0, 1000);
     pin.y = clamp(Math.round((cy / rect.height) * 1000), 0, 1000);
     placePin(pin);
     if (!reduceMotion.matches) {
-      var step = e.clientX - d.lx;
+      var step = d.ex - d.lx;
       if (step !== 0) {
         var next = clamp(d.lean * 0.5 + step * 0.9, -14, 14);
         if (Math.abs(next) < 1) next = step > 0 ? 1 : -1;
@@ -465,12 +573,13 @@
       p.setAttribute('data-lean', String(lean));
       p.style.setProperty('--lean', lean + 'deg');
     }
-    d.lx = e.clientX;
-    layoutStrings(id);
+    d.lx = d.ex;
+    raf.pins[id] = true;
   }
   function onPointerUp(e, id, cancelled) {
     var d = dragging;
     if (!d || d.id !== id || d.pointer !== e.pointerId) return;
+    if (d.dirty) applyDragMove();
     dragging = null;
     var p = pinEls[id];
     try { p.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
@@ -480,7 +589,9 @@
     if (d.moved) {
       var pin = pinById(id);
       sendMove(pin);
-      layoutFor(700);
+      layoutPin(id);
+      layoutFor(700, id);
+      placePanels();
     } else if (!cancelled && selectedId) {
       completeTie(id);
     }
@@ -493,6 +604,7 @@
   function sendMove(pin, announceIt) {
     cancelPendingMove(pin);
     api('PATCH', base + '/pins/' + encodeURIComponent(pin.id), { x: pin.x, y: pin.y }).then(function (r) {
+      if (isGone(r)) { removePinLocal(pin.id); return; }
       if (!r.ok) { showToast(messageFor(r)); return; }
       applyMeta(r.data);
       if (pinById(pin.id) && announceIt) announce(pin.phrase + ' moved to x ' + pin.x + ', y ' + pin.y + '.');
@@ -514,7 +626,8 @@
       pin.x = clamp(pin.x + dx, 0, 1000);
       pin.y = clamp(pin.y + dy, 0, 1000);
       placePin(pin);
-      layoutStrings(id);
+      layoutPin(id);
+      placePanels();
       cancelPendingMove(pin);
       pin.timer = setTimeout(function () { pin.timer = null; sendMove(pin, true); }, 250);
     } else if (e.key === 'Enter' || e.key === ' ') {
@@ -556,12 +669,18 @@
     var aId = selectedId;
     if (!aId) return;
     postString(aId, bId).then(function (r) {
-      if (r.ok) { cancelTie(); return; }
+      if (r.ok || r.gone) { cancelTie(); return; }
       if (errorCode(r) !== 'self_link') cancelTie();
     });
   }
   function postString(aId, bId) {
     return api('POST', base + '/strings', { a: aId, b: bId }).then(function (r) {
+      if (isGone(r)) {
+        // A pin was removed by a colleague: bring the wall up to date, quietly.
+        api('GET', base).then(function (g) { if (g.ok && g.data) applySnapshot(g.data); });
+        r.gone = true;
+        return r;
+      }
       if (!r.ok) { showToast(messageFor(r)); return r; }
       var s = r.data.string;
       addString(s, true);
@@ -587,6 +706,7 @@
     el.findingText.textContent = s.finding;
     el.findingPair.textContent = 'A: ' + (pa ? pa.phrase : '') + ' / B: ' + (pb ? pb.phrase : '');
     el.finding.hidden = false;
+    placePanels();
     el.findingClose.focus();
   }
   function closeFinding(restoreFocus) {
@@ -598,6 +718,7 @@
   }
   function cutString(id) {
     api('DELETE', base + '/strings/' + encodeURIComponent(id)).then(function (r) {
+      if (isGone(r)) { removeStringLocal(id); el.input.focus(); return; }
       if (!r.ok) { showToast(messageFor(r)); return; }
       applyMeta(r.data);
       removeStringLocal(id);
@@ -616,6 +737,11 @@
     var neighbour = state.pins[idx + 1] || state.pins[idx - 1] || null;
     var neighbourId = neighbour ? neighbour.id : null;
     api('DELETE', base + '/pins/' + encodeURIComponent(id)).then(function (r) {
+      if (isGone(r)) {
+        removePinLocal(id);
+        (neighbourId && pinEls[neighbourId] ? pinEls[neighbourId] : el.input).focus();
+        return;
+      }
       if (!r.ok) { showToast(messageFor(r)); return; }
       cancelPendingMove(pin);
       var removed = r.data.removedStrings || [];
@@ -641,11 +767,16 @@
     el.input.removeAttribute('aria-invalid');
   }
   el.input.addEventListener('input', phraseOk);
+  // Enter twice quickly must make one pin: while a submission of this exact text is queued or in flight, a repeat is ignored.
+  var queuedText = null;
   el.form.addEventListener('submit', function (e) {
     e.preventDefault();
     var text = el.input.value;
     if (text.trim() === '') { phraseFail(COPY.empty); return; }
+    if (text === queuedText) return;
+    queuedText = text;
     // Submissions are sent one after another so pins keep the order they were typed in.
+    // The trailing catch keeps one failed step from stopping every later pin.
     sendChain = sendChain.then(function () {
       return api('POST', base + '/pins', { phrase: text }).then(function (r) {
         if (!r.ok) { phraseFail(messageFor(r)); return; }
@@ -656,6 +787,10 @@
         applyMeta(r.data);
         el.input.focus();
       });
+    }).catch(function () {
+      phraseFail(COPY.network);
+    }).then(function () {
+      if (queuedText === text) queuedText = null;
     });
   });
 
@@ -667,10 +802,12 @@
     titleSent = next;
     api('PATCH', base, { title: next }).then(function (r) {
       titleSent = null;
-      if (!r.ok) { showToast(messageFor(r)); el.title.value = state.title; return; }
+      // Text typed after Enter is newer than this reply: only write the reply back if the box still holds what was sent.
+      var unchanged = el.title.value === next;
+      if (!r.ok) { showToast(messageFor(r)); if (unchanged) el.title.value = state.title; return; }
       applyMeta(r.data);
       setTitle(r.data.title);
-      el.title.value = r.data.title;
+      if (unchanged) el.title.value = r.data.title;
     });
   }
   el.title.addEventListener('blur', saveTitle);
@@ -689,6 +826,7 @@
     el.detMsg.textContent = COPY.thinking;
     setAccept(false);
     el.det.hidden = false;
+    placePanels();
     el.det.focus();
     api('GET', base + '/detective').then(function (r) {
       if (el.det.hidden) return;
@@ -714,7 +852,7 @@
   el.detAccept.addEventListener('click', function () {
     var sug = detSuggestion;
     if (!sug) return;
-    postString(sug.a, sug.b).then(function (r) { if (r.ok) closeDetective(false); });
+    postString(sug.a, sug.b).then(function (r) { if (r.ok || r.gone) closeDetective(false); });
   });
 
   /* ---------- Escape ---------- */
@@ -722,7 +860,52 @@
     if (e.key !== 'Escape') return;
     if (selectedId) { cancelTie(); return; }
     if (!el.finding.hidden) { closeFinding(true); return; }
-    if (!el.det.hidden) closeDetective(true);
+    if (!el.det.hidden) { closeDetective(true); return; }
+    if (!el.actionToast.hidden) hideToast();
+  });
+
+  /* ---------- panels must not cover the focused pin or string ---------- */
+  function inside(r, x, y) { return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
+  function covers(panel, target) {
+    var r = panel.getBoundingClientRect();
+    if (target.classList.contains('string')) {
+      var path = target.querySelector('.string-line');
+      var layer = el.strings.getBoundingClientRect();
+      try {
+        var len = path.getTotalLength();
+        for (var i = 0; i <= 24; i += 1) {
+          var pt = path.getPointAtLength((len * i) / 24);
+          if (inside(r, layer.left + pt.x, layer.top + pt.y)) return true;
+        }
+      } catch (err) { return false; }
+      return false;
+    }
+    var t = target.getBoundingClientRect();
+    return t.left < r.right && t.right > r.left && t.top < r.bottom && t.bottom > r.top;
+  }
+  function focusedThing() {
+    var a = document.activeElement;
+    var hit = a && a.closest ? (a.closest('.pin') || a.closest('.string')) : null;
+    if (hit) return hit;
+    if (openString && stringEls[openString] && a && el.finding.contains(a)) return stringEls[openString];
+    return lastThing && lastThing.isConnected ? lastThing : null;
+  }
+  // The pin or string you were last on, so a panel opened from a button still keeps clear of it.
+  var lastThing = null;
+  function placePanels() {
+    var target = focusedThing();
+    [el.finding, el.det].forEach(function (panel) {
+      if (panel.hidden) return;
+      panel.classList.remove('at-top');
+      if (!target || !covers(panel, target)) return;
+      panel.classList.add('at-top');
+      if (covers(panel, target)) panel.classList.remove('at-top');
+    });
+  }
+  document.addEventListener('focusin', function (e) {
+    var t = e.target && e.target.closest ? (e.target.closest('.pin') || e.target.closest('.string')) : null;
+    if (t) lastThing = t;
+    placePanels();
   });
 
   /* ---------- theme ---------- */
@@ -794,7 +977,7 @@
           var pe = pinEls[pin.id];
           if (!reduceMotion.matches) { pe.classList.add('glide'); setTimeout(function () { pe.classList.remove('glide'); }, 320); }
           placePin(pin);
-          layoutFor(360);
+          layoutFor(360, pin.id);
         }
         if (remote) announce('A colleague moved ' + pin.phrase + '.', true);
       }
@@ -854,6 +1037,8 @@
   el.retry.addEventListener('click', function () { window.location.reload(); });
   el.input.focus();
   api('GET', base).then(function (r) {
+    // A snapshot that already arrived over the event stream is newer than this slow first reply: keep it.
+    if (state.loaded) return;
     if (r.ok && r.data) { applySnapshot(r.data); return; }
     if (!state.loaded) { el.loading.hidden = true; el.wallError.hidden = false; }
   });

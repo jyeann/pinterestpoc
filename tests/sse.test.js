@@ -126,3 +126,45 @@ test('a subscriber whose write throws is dropped without breaking the others', (
   bad.end = () => { throw new Error('gone'); };
   hub.closeAll();
 });
+
+test('per-address cap per wall: at the limit ok, one over refused, other address and other wall unaffected', () => {
+  const hub = createHub({ heartbeatMs: 0, maxPerAddr: 2 });
+  assert.equal(hub.subscribe('w', fakeRes(), snap(), '1.1.1.1'), true);
+  assert.equal(hub.subscribe('w', fakeRes(), snap(), '1.1.1.1'), true);
+  const over = fakeRes();
+  assert.equal(hub.subscribe('w', over, snap(), '1.1.1.1'), false);
+  assert.equal(over.head, null);
+  assert.equal(hub.subscribe('w', fakeRes(), snap(), '2.2.2.2'), true);
+  assert.equal(hub.subscribe('v', fakeRes(), snap(), '1.1.1.1'), true);
+  assert.equal(hub.count('w'), 3);
+});
+
+test('per-address slot is freed on close', () => {
+  const hub = createHub({ heartbeatMs: 0, maxPerAddr: 1 });
+  const a = fakeRes();
+  assert.equal(hub.subscribe('w', a, snap(), 'x'), true);
+  assert.equal(hub.subscribe('w', fakeRes(), snap(), 'x'), false);
+  a.emit('close');
+  assert.equal(hub.subscribe('w', fakeRes(), snap(), 'x'), true);
+});
+
+test('global cap: at the limit ok, one over refused, freed on close and on closeAll', () => {
+  const hub = createHub({ heartbeatMs: 0, maxTotal: 2 });
+  const a = fakeRes();
+  assert.equal(hub.subscribe('a', a, snap(), 'x'), true);
+  assert.equal(hub.subscribe('b', fakeRes(), snap(), 'y'), true);
+  assert.equal(hub.subscribe('c', fakeRes(), snap(), 'z'), false);
+  a.emit('close');
+  assert.equal(hub.subscribe('c', fakeRes(), snap(), 'z'), true);
+  hub.closeAll();
+  assert.equal(hub.subscribe('d', fakeRes(), snap(), 'x'), true);
+  assert.equal(hub.subscribe('d', fakeRes(), snap(), 'x'), true);
+  assert.equal(hub.subscribe('d', fakeRes(), snap(), 'x'), false);
+});
+
+test('defaults: 50 per wall, per-address above 50, 2000 global', () => {
+  const { MAX_PER_ADDR, MAX_TOTAL } = require('../src/sse');
+  assert.equal(MAX_PER_WALL, 50);
+  assert.equal(MAX_PER_ADDR > 50, true);
+  assert.equal(MAX_TOTAL, 2000);
+});

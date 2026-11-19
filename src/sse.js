@@ -2,6 +2,8 @@
 // Server-Sent Events hub (design 4.1).
 
 const MAX_PER_WALL = 50;
+const MAX_PER_ADDR = 60; // above the 50-per-wall cap an acceptance test fills from one address
+const MAX_TOTAL = 2000;
 
 function frame(name, data) {
   return `id: ${data.version}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -10,13 +12,17 @@ function frame(name, data) {
 function createHub(opts = {}) {
   const heartbeatMs = opts.heartbeatMs === undefined ? 15000 : opts.heartbeatMs;
   const maxPerWall = opts.maxPerWall === undefined ? MAX_PER_WALL : opts.maxPerWall;
+  const maxPerAddr = opts.maxPerAddr === undefined ? MAX_PER_ADDR : opts.maxPerAddr;
+  const maxTotal = opts.maxTotal === undefined ? MAX_TOTAL : opts.maxTotal;
   const subs = new Map(); // wallId -> Set<res>
+  const addrOf = new Map(); // res -> address
   let timer = null;
 
   function remove(wallId, res) {
     const set = subs.get(wallId);
     if (!set) return;
     set.delete(res);
+    addrOf.delete(res);
     if (set.size === 0) subs.delete(wallId);
     if (subs.size === 0 && timer) {
       clearInterval(timer);
@@ -46,9 +52,16 @@ function createHub(opts = {}) {
 
   return {
     // Returns false (nothing written) when the wall already has the maximum number of subscribers.
-    subscribe(wallId, res, snapshot) {
+    subscribe(wallId, res, snapshot, addr) {
       const existing = subs.get(wallId);
       if (existing && existing.size >= maxPerWall) return false;
+      if (addrOf.size >= maxTotal) return false;
+      if (existing && addr !== undefined) {
+        let same = 0;
+        for (const r of existing) if (addrOf.get(r) === addr) same += 1;
+        if (same >= maxPerAddr) return false;
+      }
+      addrOf.set(res, addr);
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-store',
@@ -77,6 +90,7 @@ function createHub(opts = {}) {
     closeAll() {
       const all = [...subs.values()].flatMap((set) => [...set]);
       subs.clear();
+      addrOf.clear();
       if (timer) {
         clearInterval(timer);
         timer = null;
@@ -88,4 +102,4 @@ function createHub(opts = {}) {
   };
 }
 
-module.exports = { createHub, MAX_PER_WALL };
+module.exports = { createHub, MAX_PER_WALL, MAX_PER_ADDR, MAX_TOTAL };

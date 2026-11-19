@@ -161,3 +161,37 @@ test('a write error is logged once, leaves no temp file, and does not throw; a l
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).format, 1);
   rm(dir);
 });
+
+test('a failed write keeps the store dirty; flush and the next save retry it', async () => {
+  const dir = tmp();
+  const file = path.join(dir, 'blocked', 'data.json');
+  fs.writeFileSync(path.join(dir, 'blocked'), 'x'); // a file where the directory must be
+  const logs = [];
+  const p = createPersist({ file, getData: () => ({ format: 1, walls: [] }), delay: 5, log: (l) => logs.push(l) });
+  try {
+    p.scheduleSave();
+    assert.equal(p.pending(), true);
+    assert.equal(p.flush(), false);
+    assert.equal(p.pending(), true); // still dirty after a failed flush
+    p.scheduleSave();
+    await waitFor(() => logs.length >= 2);
+    assert.equal(p.pending(), true); // still dirty after a failed timer save
+    fs.rmSync(path.join(dir, 'blocked'));
+    assert.equal(p.flush(), true);
+    assert.equal(p.pending(), false);
+    assert.equal(fs.existsSync(file), true);
+    assert.equal(p.flush(), false);
+  } finally { rm(dir); }
+});
+
+test('default debounce delay is 50 ms: no write at 15 ms, written by the deadline', async () => {
+  const dir = tmp();
+  const file = path.join(dir, 'd.json');
+  const p = createPersist({ file, getData: () => ({ format: 1, walls: [] }) });
+  try {
+    p.scheduleSave();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(fs.existsSync(file), false);
+    await waitFor(() => fs.existsSync(file));
+  } finally { rm(dir); }
+});

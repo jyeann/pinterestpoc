@@ -7,6 +7,8 @@ const H = require('./http');
 const { createHub } = require('./sse');
 const { serveStatic } = require('./static');
 
+const REQUEST_TIMEOUT_MS = 10000;
+const HEADERS_TIMEOUT_MS = 5000;
 const MUTATING = new Set(['POST', 'PATCH', 'DELETE']);
 
 function createServer(opts = {}) {
@@ -90,7 +92,7 @@ function createServer(opts = {}) {
     { method: 'GET', path: '/api/walls/:id/events', handler: (c) => {
       const wall = store.getWall(c.params.id);
       if (!wall) return H.sendError(c.res, 'not_found');
-      if (!hub.subscribe(c.params.id, c.res, wall)) return H.sendError(c.res, 'capacity');
+      if (!hub.subscribe(c.params.id, c.res, wall, c.req.socket.remoteAddress)) return H.sendError(c.res, 'capacity');
       return undefined;
     } },
   ];
@@ -141,6 +143,8 @@ function createServer(opts = {}) {
         H.sendError(res, 'internal');
       });
   });
+  server.requestTimeout = opts.requestTimeoutMs === undefined ? REQUEST_TIMEOUT_MS : opts.requestTimeoutMs;
+  server.headersTimeout = opts.headersTimeoutMs === undefined ? HEADERS_TIMEOUT_MS : opts.headersTimeoutMs;
   server.hub = hub;
   return server;
 }

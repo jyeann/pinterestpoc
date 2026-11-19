@@ -5,6 +5,7 @@ function createRateLimiter(opts = {}) {
   const capacity = opts.capacity === undefined ? 120 : opts.capacity;
   const refillPerSec = opts.refillPerSec === undefined ? 30 : opts.refillPerSec;
   const idleMs = opts.idleMs === undefined ? 60000 : opts.idleMs;
+  const maxBuckets = opts.maxBuckets === undefined ? 10000 : opts.maxBuckets;
   const now = opts.now || Date.now;
   const buckets = new Map();
   let lastSweep = now();
@@ -24,6 +25,10 @@ function createRateLimiter(opts = {}) {
       if (t - lastSweep >= idleMs) sweep();
       let b = buckets.get(key);
       if (!b) {
+        if (buckets.size >= maxBuckets) {
+          sweep();
+          if (buckets.size >= maxBuckets) buckets.delete(buckets.keys().next().value); // oldest inserted
+        }
         b = { tokens: capacity, last: t };
         buckets.set(key, b);
       } else {

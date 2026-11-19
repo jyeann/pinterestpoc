@@ -116,3 +116,22 @@ test('stop ends open event streams', async () => {
   await app.stop();
   assert.equal(await closed, true);
 });
+
+test('stop flushes again after the server closed: a change accepted during shutdown is saved', async () => {
+  const net = require('node:net');
+  const dir = tmp();
+  const file = path.join(dir, 'data.json');
+  const app = await start({ env: { PORT: '0', RATE_LIMIT: '0', RED_STRING_DATA: file }, out: sink() });
+  try {
+    const body = JSON.stringify({ title: 'Late' });
+    const sock = net.connect(app.port, '127.0.0.1');
+    await new Promise((r) => sock.once('connect', r));
+    sock.on('error', () => {});
+    sock.write(`POST /api/walls HTTP/1.1\r\nHost: x\r\nConnection: close\r\nContent-Length: ${body.length}\r\n\r\n`);
+    await new Promise((r) => setTimeout(r, 30));
+    const stopping = app.stop();
+    setTimeout(() => sock.write(body), 120); // after the first flush, before the 200 ms forced close
+    await stopping;
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).walls[0].title, 'Late');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -65,8 +65,7 @@ function createPersist(opts) {
     if (timer) return;
     timer = setTimeout(() => {
       timer = null;
-      dirty = false;
-      writeNow();
+      if (writeNow()) dirty = false;
     }, delay);
     if (timer.unref) timer.unref();
   }
@@ -78,8 +77,9 @@ function createPersist(opts) {
       timer = null;
     }
     if (!dirty) return false;
+    if (!writeNow()) return false;
     dirty = false;
-    return writeNow();
+    return true;
   }
 
   return { load, scheduleSave, flush, pending: () => dirty };

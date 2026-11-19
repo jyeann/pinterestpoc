@@ -425,3 +425,36 @@ test('load enforces the pin and string limits', () => {
   assert.equal(g.pins.length, 100);
   assert.equal(g.strings.length, 500);
 });
+
+test('load: createdAt accepted only as a date string of at most 40 chars', () => {
+  const store = createStore({ now: () => 'NOW' });
+  const rec = (id, createdAt) => ({ id, title: 't', createdAt, version: 0, pins: [], strings: [] });
+  const ok = '2024-01-02T03:04:05.000Z';
+  const long40 = `Jan 2 2024 03:04:05 GMT+0000 (${'x'.repeat(9)})`;
+  store.load({ walls: [rec('a', ok), rec('b', 'garbage'), rec('c', 5), rec('d', long40), rec('e', long40.replace('xxx', 'xxxx')), rec('f', '')] });
+  const at = (id) => store.getWall(id).createdAt;
+  assert.equal(at('a'), ok);
+  assert.equal(at('b'), 'NOW');
+  assert.equal(at('c'), 'NOW');
+  assert.equal(at('d'), long40);
+  assert.equal(at('e'), 'NOW');
+  assert.equal(at('f'), 'NOW');
+});
+
+test('load: duplicates dropped via indexes; strings reversed pair, repeated id, and ids freed after removal', () => {
+  const store = createStore();
+  const P = (id, phrase) => ({ id, phrase, x: 1, y: 1 });
+  store.load({ walls: [{ id: 'w', pins: [P('p1', 'A'), P('p1', 'B'), P('p2', 'C'), P('p3', 'D')],
+    strings: [{ id: 's1', a: 'p1', b: 'p2' }, { id: 's1', a: 'p1', b: 'p3' }, { id: 's2', a: 'p2', b: 'p1' }, { id: 's3', a: 'p1', b: 'p1' }, { id: 's4', a: 'p3', b: 'p1' }] }] });
+  const w = store.getWall('w');
+  assert.deepEqual(w.pins.map((p) => p.phrase), ['A', 'C', 'D']);
+  assert.deepEqual(w.strings.map((s) => s.id), ['s1', 's4']);
+  assert.equal(store.addString('w', 'p2', 'p1').code, 'duplicate_string');
+  assert.equal(store.addString('w', 'p1', 'p3').code, 'duplicate_string');
+  assert.equal(store.addString('w', 'p3', 'p2').ok, true);
+  store.removeString('w', 's4');
+  assert.equal(store.addString('w', 'p3', 'p1').ok, true);
+  store.removePin('w', 'p2');
+  assert.equal(store.addString('w', 'p3', 'p2').code, 'bad_pin');
+  assert.equal(store.addPin('w', { phrase: 'E' }).ok, true);
+});
