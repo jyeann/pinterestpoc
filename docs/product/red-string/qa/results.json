@@ -1,0 +1,330 @@
+{
+  "commit": "790eb57",
+  "date": "2026-11-19T20:53:25.289Z",
+  "totals": {
+    "passed": 52,
+    "failed": 0,
+    "skipped": 1,
+    "total": 53
+  },
+  "results": [
+    {
+      "id": "J1",
+      "title": "Journey J1",
+      "status": "pass",
+      "detail": "all of UC1, J1.live pass"
+    },
+    {
+      "id": "J2",
+      "title": "Journey J2",
+      "status": "pass",
+      "detail": "all of UC2, UC3, J2.extra pass"
+    },
+    {
+      "id": "J3",
+      "title": "Journey J3",
+      "status": "pass",
+      "detail": "all of UC4 pass"
+    },
+    {
+      "id": "J4",
+      "title": "Journey J4",
+      "status": "pass",
+      "detail": "all of UC5, UC6 pass"
+    },
+    {
+      "id": "J5",
+      "title": "Journey J5",
+      "status": "pass",
+      "detail": "all of UC7, UC8, X6 pass"
+    },
+    {
+      "id": "J6",
+      "title": "Journey J6",
+      "status": "pass",
+      "detail": "all of UC9 pass"
+    },
+    {
+      "id": "J7",
+      "title": "Journey J7",
+      "status": "pass",
+      "detail": "all of UC10, J7.announce pass"
+    },
+    {
+      "id": "J8",
+      "title": "Journey J8",
+      "status": "pass",
+      "detail": "all of UC11, UC12 pass"
+    },
+    {
+      "id": "J9",
+      "title": "Journey J9",
+      "status": "pass",
+      "detail": "all of UC13 pass"
+    },
+    {
+      "id": "J10",
+      "title": "Journey J10",
+      "status": "pass",
+      "detail": "all of UC14, X1, J10.extra pass"
+    },
+    {
+      "id": "J11",
+      "title": "Journey J11",
+      "status": "pass",
+      "detail": "all of UC15, J11.sigterm pass"
+    },
+    {
+      "id": "J12",
+      "title": "Journey J12",
+      "status": "pass",
+      "detail": "all of UC16, UC17, UC18, X2 pass"
+    },
+    {
+      "id": "J13",
+      "title": "Journey J13",
+      "status": "pass",
+      "detail": "all of UC19, UC20, X3, X4 pass"
+    },
+    {
+      "id": "J14",
+      "title": "Journey J14",
+      "status": "pass",
+      "detail": "all of UC21, X5, X7 pass"
+    },
+    {
+      "id": "J15",
+      "title": "Journey J15",
+      "status": "pass",
+      "detail": "all of UC22 pass"
+    },
+    {
+      "id": "J16",
+      "title": "Journey J16",
+      "status": "pass",
+      "detail": "all of UC23 pass"
+    },
+    {
+      "id": "UC1",
+      "title": "new case: URL, board, focus, score 0, Hunch, empty state, POST 201",
+      "status": "pass",
+      "detail": "POST 201, id=-tvFdNXLVzFz"
+    },
+    {
+      "id": "J1.live",
+      "title": "J1: connection shows Live; empty-state copy; Score label visible",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC2",
+      "title": "pin \"pigeons\": one pin, label, art svg, input cleared, announcer, no navigation",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC3",
+      "title": "new pin usable: in viewport, tie/delete enabled, delete announces and shows empty state",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "J2.extra",
+      "title": "J2: pin is announced via polite live region with role=status",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC4",
+      "title": "art deterministic across walls and reload; moon differs; same-origin requests only",
+      "status": "pass",
+      "detail": "art length 457, moon length 617"
+    },
+    {
+      "id": "UC5",
+      "title": "drag: lean non-zero mid-drag, settles to 0, position matches rectangle",
+      "status": "pass",
+      "detail": "maxLean=14.0deg settle=1ms moved 70,40->231,387; err push=178.6 pinCentre=8.1 units"
+    },
+    {
+      "id": "UC6",
+      "title": "position persists after reload (within 5 units)",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC7",
+      "title": "tie: hint, selected, string with ids, finding panel, announcer",
+      "status": "pass",
+      "detail": "A strange hum was recorded whenever pigeons met the moon."
+    },
+    {
+      "id": "UC8",
+      "title": "reopen finding by clicking the string; delete string resets score",
+      "status": "pass",
+      "detail": "score 14 -> 0"
+    },
+    {
+      "id": "UC9",
+      "title": "same finding either order; different pair differs",
+      "status": "pass",
+      "detail": "A strange hum was recorded whenever pigeons met the moon. | pigeons is just ufo with better public relations."
+    },
+    {
+      "id": "UC10",
+      "title": "8 pins, all pairs: score non-decreasing, reaches level 4, level never drops",
+      "status": "pass",
+      "detail": "strings=12; score/level: 14/0 31/1 48/1 65/2 82/2 99/2 116/2 136/3 156/3 176/3 196/3 216/4"
+    },
+    {
+      "id": "J7.announce",
+      "title": "J7: announcer names the new status when it changes",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC11",
+      "title": "detective: teaser names two pins, accept ties exactly them",
+      "status": "pass",
+      "detail": "I like pigeons and the moon together. Nobody ever asks why."
+    },
+    {
+      "id": "UC12",
+      "title": "detective declines with <2 pins and when all connected",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC13",
+      "title": "shared live wall: A edits, B sees within 1500ms with colleague announcement; SSE content-type",
+      "status": "pass",
+      "detail": "SSE content-type text/event-stream"
+    },
+    {
+      "id": "UC14",
+      "title": "case file: status/score/evidence/findings, print hides buttons, one page (3 and 30 pins)",
+      "status": "pass",
+      "detail": "pages: 3 pins=1, 30 pins=1; score 31 status Theory"
+    },
+    {
+      "id": "X1",
+      "title": "design/ux: case file with 100 pins and many strings fits one printed page",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "J10.extra",
+      "title": "J10: case file back link returns to wall; print button present; \"Close the case\" is a link to /case",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC15",
+      "title": "restart on same data file and port: same pins, strings, positions, score",
+      "status": "pass",
+      "detail": "SIGTERM exit code 0; score 31"
+    },
+    {
+      "id": "J11.sigterm",
+      "title": "J11: server exits 0 on SIGTERM",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC16",
+      "title": "404 pages for unknown wall (wall and case routes)",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC17",
+      "title": "empty and whitespace phrases refused inline",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC18",
+      "title": "61 chars refused, 60 accepted, API 400, XSS phrase shown as text",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "X2",
+      "title": "ux: long label clamps to 2 lines with ellipsis and full text in title",
+      "status": "pass",
+      "detail": "{\"lc\":\"2\",\"ov\":\"hidden\",\"to\":\"clip\",\"h\":42.3677978515625,\"lh\":16}"
+    },
+    {
+      "id": "X3",
+      "title": "tab order: wall-title, share-link, theme-toggle, close-case, phrase-input, phrase-submit, detective-btn",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC19",
+      "title": "keyboard only: two pins, arrows move, persists, tie via Enter, Escape, Delete",
+      "status": "pass",
+      "detail": "moved 315,399->345,439"
+    },
+    {
+      "id": "X4",
+      "title": "J13: pin delete focus to next pin; detective and close case by keyboard only",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC20",
+      "title": "focus outlines visible on every Tab stop; detective focus in/out; announcer changes for pin, string, finding",
+      "status": "pass",
+      "detail": "14 tab stops all outlined"
+    },
+    {
+      "id": "UC20-axe",
+      "title": "axe-core serious/critical violations in both themes",
+      "status": "skipped",
+      "detail": "axe-core is not installed (no node_modules/axe-core); ux.md allows skipping. No automated axe scan was run."
+    },
+    {
+      "id": "SHOT",
+      "title": "populated wall screenshots (Day + Night), 390px wall",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC21",
+      "title": "phone 390x844 touch: no h-scroll, J1/J2, 44px targets, tie by tap, bottom sheet",
+      "status": "pass",
+      "detail": "scrollWidth=390; pin width=114.6868667602539; input x=16 w=358; panel {\"x\":0,\"y\":655.96875,\"width\":390,\"height\":188.03125}; panel height ratio 0.22; small targets: none; panel overlaps input while open: false"
+    },
+    {
+      "id": "X5",
+      "title": "ux responsive: 390px layout details (16px gutter, pin 112px, panel max 45vh, board >=360px high, input full width)",
+      "status": "pass",
+      "detail": "{\"inL\":16,\"inR\":16,\"bh\":536.84375,\"fh\":188.03125,\"pw\":112}"
+    },
+    {
+      "id": "X6",
+      "title": "ux: a freshly pinned second pin does not cover the first pin's Tie/Remove buttons (desktop)",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "X7",
+      "title": "ux: on a phone the tie-hint does not cover the pins the person must tap next",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "UC22",
+      "title": "connection loss: reconnecting <=5s, then live and wall matches server",
+      "status": "pass",
+      "detail": "state while down: reconnecting (\"Reconnecting...\")"
+    },
+    {
+      "id": "UC23",
+      "title": "dark scheme differs from light, contrast >= 4.5, toggle persists, reduced motion",
+      "status": "pass",
+      "detail": "contrast 15.14; light bg=rgb(43, 34, 26) | none; dark bg=rgb(20, 16, 12) | none; toggle dark->light; subtree animations 0"
+    }
+  ]
+}

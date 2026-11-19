@@ -257,6 +257,7 @@
     state.pins.push(pin);
     pinEls[pin.id] = buildPin(pin);
     el.pinLayer.appendChild(pinEls[pin.id]);
+    fitBoard(state.pins.length);
     placePin(pin);
     renderEmpty();
     layoutAll();
@@ -275,6 +276,7 @@
     if (p && p.parentNode) p.parentNode.removeChild(p);
     delete pinEls[id];
     if (selectedId === id) cancelTie();
+    fitBoard(state.pins.length);
     renderEmpty();
     return pin;
   }
@@ -767,6 +769,70 @@
     el.input.removeAttribute('aria-invalid');
   }
   el.input.addEventListener('input', phraseOk);
+  // Choose a free spot for a new card: first non-overlapping slot on a grid (row by row), else the least-overlapping one.
+  // Returns {x, y} in 0..1000 board units, or null when the board cannot be measured yet.
+  // Card size in px. Measures a real card, or a hidden probe when the wall is empty.
+  function cardSize() {
+    var sample = state.pins.length ? pinEls[state.pins[0].id] : null;
+    var probe = null;
+    if (!sample || !sample.offsetWidth) {
+      probe = document.createElement('div');
+      probe.className = 'pin';
+      probe.setAttribute('aria-hidden', 'true');
+      probe.style.cssText = 'visibility:hidden;animation:none;transition:none;left:0;top:0;translate:none;';
+      el.pinLayer.appendChild(probe);
+      sample = probe;
+    }
+    var size = { w: sample.offsetWidth, h: sample.offsetHeight };
+    if (probe) el.pinLayer.removeChild(probe);
+    return size;
+  }
+  // On phones the board grows taller than the viewport so `count` cards fit side by side in rows
+  // without covering each other. Positions stay 0..1000 of the board box, so other viewports agree.
+  var phoneMQ = window.matchMedia ? window.matchMedia('(max-width: 599.98px)') : null;
+  function fitBoard(count) {
+    if (!phoneMQ || !phoneMQ.matches) { el.board.style.minHeight = ''; return; }
+    var W = el.pinLayer.clientWidth;
+    if (!W) return;
+    var c = cardSize(), gap = 10;
+    if (!c.w || !c.h) return;
+    var cols = Math.max(1, Math.floor((W + gap) / (c.w + gap)));
+    var rows = Math.ceil(Math.max(count, 1) / cols) + 1;
+    var need = rows * (c.h + gap) + gap + (el.board.offsetHeight - el.pinLayer.clientHeight);
+    el.board.style.minHeight = Math.ceil(need) + 'px';
+  }
+  if (phoneMQ && phoneMQ.addEventListener) phoneMQ.addEventListener('change', function () { fitBoard(state.pins.length); });
+  function freeSpot() {
+    fitBoard(state.pins.length + 1);
+    var W = el.pinLayer.clientWidth, H = el.pinLayer.clientHeight;
+    if (!W || !H) return null;
+    // Only phones place the first card too (top-left); wider boards keep the server's default for it.
+    if (!state.pins.length && !(phoneMQ && phoneMQ.matches)) return null;
+    var size = cardSize();
+    if (!size.w) return null;
+    var w = size.w, h = size.h, gap = 10;
+    var hw = w / 2, hh = h / 2;
+    function clampC(v, half, size) { return Math.max(half, Math.min(size - half, v)); }
+    var others = state.pins.map(function (q) {
+      return { x: clampC(q.x / 1000 * W, hw, W), y: clampC(q.y / 1000 * H, hh, H) };
+    });
+    var step = 16, best = null, bestArea = Infinity;
+    var maxX = Math.max(hw, W - hw), maxY = Math.max(hh, H - hh);
+    for (var cy = hh; cy <= maxY + 0.5; cy += step) {
+      for (var cx = hw; cx <= maxX + 0.5; cx += step) {
+        var area = 0;
+        for (var i = 0; i < others.length; i++) {
+          var ox = Math.min(cx + hw + gap, others[i].x + hw) - Math.max(cx - hw - gap, others[i].x - hw);
+          var oy = Math.min(cy + hh + gap, others[i].y + hh) - Math.max(cy - hh - gap, others[i].y - hh);
+          if (ox > 0 && oy > 0) area += ox * oy;
+        }
+        if (area === 0) return { x: Math.round(cx / W * 1000), y: Math.round(cy / H * 1000) };
+        if (area < bestArea) { bestArea = area; best = { x: Math.round(cx / W * 1000), y: Math.round(cy / H * 1000) }; }
+      }
+    }
+    return best;
+  }
+
   // Enter twice quickly must make one pin: while a submission of this exact text is queued or in flight, a repeat is ignored.
   var queuedText = null;
   el.form.addEventListener('submit', function (e) {
@@ -778,7 +844,10 @@
     // Submissions are sent one after another so pins keep the order they were typed in.
     // The trailing catch keeps one failed step from stopping every later pin.
     sendChain = sendChain.then(function () {
-      return api('POST', base + '/pins', { phrase: text }).then(function (r) {
+      var body = { phrase: text };
+      var spot = freeSpot();
+      if (spot) { body.x = spot.x; body.y = spot.y; }
+      return api('POST', base + '/pins', body).then(function (r) {
         if (!r.ok) { phraseFail(messageFor(r)); return; }
         phraseOk();
         if (el.input.value === text) el.input.value = '';

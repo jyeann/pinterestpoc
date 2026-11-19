@@ -39,7 +39,6 @@ async function start(opts = {}) {
     });
   });
   const actual = server.address().port;
-  out.write(`listening on http://${host}:${actual}\n`);
 
   let stopping = null;
   function stop() {
@@ -67,6 +66,10 @@ async function start(opts = {}) {
     process.once('SIGTERM', onSignal);
     process.once('SIGINT', onSignal);
   }
+
+  // Announce only after the signal handlers exist: a supervisor may send
+  // SIGTERM the moment it reads this line.
+  out.write(`listening on http://${host}:${actual}\n`);
 
   return { server, port: actual, stop };
 }

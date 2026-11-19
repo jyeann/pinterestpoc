@@ -266,6 +266,7 @@ body {
   font: 0.95rem var(--font-type); text-align: center; color: var(--paper-ink);
   background: var(--paper); border: 2px dashed var(--select); border-radius: 6px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 
 /* Pins */
@@ -290,6 +291,7 @@ body {
   animation: drop 0.25s ease-out;
 }
 .pin:hover { box-shadow: 0 1px 1px rgba(40, 20, 0, 0.25), 0 12px 18px -6px rgba(40, 20, 0, 0.55); }
+.pin:focus-within { z-index: 2; }
 .pin.dragging { cursor: grabbing; z-index: 2; transition: rotate 0.12s ease-out; box-shadow: 0 16px 24px -8px rgba(40, 20, 0, 0.6); }
 .pin.glide { transition: rotate 0.6s cubic-bezier(0.3, 1.5, 0.5, 1), left 0.25s ease, top 0.25s ease; }
 .pin[data-selected="true"]::after {
@@ -343,7 +345,7 @@ body {
   color: var(--paper-ink); background: var(--paper);
   border: 1px solid var(--paper-edge); border-top: 4px solid var(--accent); border-radius: 4px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
-  animation: rise 0.2s ease-out;
+  animation: rise-in 0.2s ease-out; opacity: 1;
 }
 .panel h2 { margin: 0 0 0.4rem; font: 0.75rem var(--font-type); letter-spacing: 0.2em; text-transform: uppercase; color: var(--paper-soft); }
 .finding-pair { margin: 0 0 0.5rem; font: 0.85rem var(--font-type); color: var(--paper-soft); overflow-wrap: anywhere; }
@@ -407,6 +409,7 @@ body {
 @keyframes drop { from { opacity: 0; scale: 1.18; } to { opacity: 1; scale: 1; } }
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes stamp-in { from { opacity: 0; scale: 1.7; } to { opacity: 1; scale: 1; } }
+@keyframes rise-in { from { translate: 0 12px; } to { translate: 0 0; } }
 @keyframes rise { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
 @keyframes pulse { 50% { opacity: 0.6; } }
 @media (prefers-reduced-motion: reduce) {
@@ -436,6 +439,15 @@ body {
   .phrase-row .btn { flex: 1 1 auto; }
   .toolbar > .btn { width: 100%; }
   .board { margin: 0.4rem 0.5rem; }
+  /* Dock the tie hint in flow between toolbar and board so it never covers a pin. */
+  .stage { flex-wrap: wrap; }
+  .tie-hint {
+    position: static; order: -1; flex: 0 0 auto; width: calc(100% - 1rem); max-width: none; margin: 0.4rem 0.5rem 0; transform: none;
+    padding: 0.35rem 0.6rem; font-size: 0.85rem;
+  }
+  .tie-hint[hidden] { display: none; }
+  .board { flex: 1 1 100%; }
+  .pin-tie, .pin-delete { padding: 2px 1px; font-size: 0.65rem; letter-spacing: -0.01em; overflow: hidden; }
   .panel {
     position: fixed; left: 0; right: 0; bottom: 0; width: auto; transform: none; max-height: 45vh;
     border-radius: 12px 12px 0 0; border-top-width: 4px;
