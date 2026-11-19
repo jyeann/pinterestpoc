@@ -1,0 +1,9 @@
+# For teams: copy to .github/CODEOWNERS, replace @your-org/maintainers, and apply the ruleset with
+#   protect.sh --approvals 1   (and set require_code_owner_review to true in ruleset.json)
+# A solo owner cannot approve their own PR, so leave this off and review the diff of these paths yourself.
+/.github/                    @your-org/maintainers
+/.claude/                    @your-org/maintainers
+/acceptance/                 @your-org/maintainers
+/verify.config.json          @your-org/maintainers
+/spec.md                     @your-org/maintainers
+/.harness-protected          @your-org/maintainers

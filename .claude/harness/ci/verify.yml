@@ -1,0 +1,78 @@
+# Copy to .github/workflows/verify.yml in a project built with the harness.
+# Required status checks for the ruleset: verify, protected-files, secret-scan (pinned to the Actions app)
+#   .claude/harness/ci/protect.sh --checks verify,protected-files,secret-scan --apply
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install dependencies (no install scripts)
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm ci --ignore-scripts
+      - name: Strong verify (tests, source coverage, test quality, mutation spot-check)
+        run: node .claude/harness/bin/verify.js
+
+  # Fails a PR that edits the gate (acceptance tests, verify config, .claude/, workflows). The checker and its
+  # protected-path list come from the BASE branch, so the PR cannot edit its own judge. There is no label override:
+  # a human admin merges deliberate gate changes with the ruleset bypass. Bootstrap: the first PR that adds the
+  # harness has no base copy of the checker; merge that one as an admin.
+  protected-files:
+    name: protected-files
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: No protected files changed
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git worktree add ../base-tree "origin/$BASE_REF"
+          node ../base-tree/.claude/harness/bin/check-protected.js --base "origin/$BASE_REF"
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Scan tracked files for secrets
+        run: node .claude/harness/bin/scan-secrets.js
+      - name: Scan this PR's history (a secret added then removed is still leaked)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node .claude/harness/bin/scan-secrets.js --history "origin/$BASE_REF"
