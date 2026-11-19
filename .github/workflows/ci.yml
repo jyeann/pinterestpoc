@@ -1,0 +1,66 @@
+# CI for this repo (the product is at the repo root). Modelled on .claude/harness/ci/verify.yml.
+# Required status checks for the ruleset: harness-tests, secret-scan (see .claude/harness/ci/README.md).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  harness-tests:
+    name: harness-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Harness self-tests
+        run: node --test .claude/harness/test/*.test.js
+
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Strong verify (tests, source coverage, test quality, holdout, mutation spot-check)
+        env:
+          CLAUDE_PROJECT_DIR: ${{ github.workspace }}
+        run: node .claude/harness/bin/verify.js
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Scan tracked files for secrets
+        run: node .claude/harness/bin/scan-secrets.js
+      - name: Scan this PR's history (a secret added then removed is still leaked)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node .claude/harness/bin/scan-secrets.js --history "origin/$BASE_REF"
